@@ -1,21 +1,150 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Songs</title>
-    <link rel="stylesheet" href="../static/styles.css">
-</head>
-<body>
-    {% extends 'base.html' %}
+{% extends "base.html" %}
 
-    {% block content %}
-    <h1>Songs</h1>
-    <div id="song-list">
-        <!-- Songs will be dynamically loaded here -->
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2><i class="fas fa-music me-2"></i>Songs Library</h2>
+            <a href="{{ url_for('create_song') }}" class="btn btn-success">
+                <i class="fas fa-plus me-1"></i>Add New Song
+            </a>
+        </div>
+
+        <!-- Search and Filter -->
+        <div class="row mb-4">
+            <div class="col-md-8">
+                <div class="input-group">
+                    <span class="input-group-text"><i class="fas fa-search"></i></span>
+                    <input type="text" class="form-control" id="searchSongs" placeholder="Search songs by title or artist...">
+                </div>
+            </div>
+            <div class="col-md-4">
+                <button class="btn btn-outline-secondary me-2" onclick="refreshSongs()">
+                    <i class="fas fa-sync-alt me-1"></i>Refresh
+                </button>
+                <button class="btn btn-outline-info" onclick="toggleView()">
+                    <i class="fas fa-th me-1"></i>Toggle View
+                </button>
+            </div>
+        </div>
+
+        <!-- Songs Grid -->
+        <div class="row" id="songsContainer">
+            {% if songs %}
+                {% for song in songs %}
+                <div class="col-md-6 col-lg-4 mb-4 song-card" data-song-title="{{ song.title|lower }}" data-song-artist="{{ song.artist|lower }}">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <div class="d-flex align-items-start mb-3">
+                                <div class="bg-success rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 50px; height: 50px;">
+                                    <i class="fas fa-music text-white"></i>
+                                </div>
+                                <div class="flex-grow-1">
+                                    <h5 class="card-title mb-1">{{ song.title }}</h5>
+                                    <p class="card-text text-muted mb-1">
+                                        <i class="fas fa-microphone me-1"></i>{{ song.artist }}
+                                    </p>
+                                    {% if song.album %}
+                                    <p class="card-text text-muted mb-1">
+                                        <i class="fas fa-compact-disc me-1"></i>{{ song.album }}
+                                    </p>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            
+                            <div class="d-flex justify-content-between align-items-center">
+                                {% if song.duration %}
+                                <span class="badge bg-secondary duration-badge">
+                                    <i class="fas fa-clock me-1"></i>{{ (song.duration // 60)|int }}:{{ '%02d'|format(song.duration % 60) }}
+                                </span>
+                                {% endif %}
+                                
+                                <button class="btn btn-outline-danger btn-sm btn-favorite" onclick="toggleFavorite({{ song.id }})">
+                                    <i class="fas fa-heart"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="card-footer bg-transparent">
+                            <div class="btn-group w-100" role="group">
+                                <a href="{{ url_for('edit_song', song_id=song.id) }}" class="btn btn-outline-primary btn-sm">
+                                    <i class="fas fa-edit me-1"></i>Edit
+                                </a>
+                                <form method="POST" action="{{ url_for('delete_song', song_id=song.id) }}" class="d-inline" onsubmit="return confirmDelete('Are you sure you want to delete this song?')">
+                                    <button type="submit" class="btn btn-outline-danger btn-sm">
+                                        <i class="fas fa-trash me-1"></i>Delete
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="col-12">
+                    <div class="text-center py-5">
+                        <i class="fas fa-music fa-4x text-muted mb-3"></i>
+                        <h4 class="text-muted">No songs found</h4>
+                        <p class="text-muted">Start building your music library by adding your first song.</p>
+                        <a href="{{ url_for('create_song') }}" class="btn btn-success">
+                            <i class="fas fa-plus me-1"></i>Add First Song
+                        </a>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
     </div>
-    {% endblock %}
-    
-    <script src="../static/scripts.js"></script>
-</body>
-</html>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Search functionality
+    document.getElementById('searchSongs').addEventListener('input', function(e) {
+        const searchTerm = e.target.value.toLowerCase();
+        const songCards = document.querySelectorAll('.song-card');
+        
+        songCards.forEach(function(card) {
+            const songTitle = card.getAttribute('data-song-title');
+            const songArtist = card.getAttribute('data-song-artist');
+            
+            if (songTitle.includes(searchTerm) || songArtist.includes(searchTerm)) {
+                card.style.display = 'block';
+            } else {
+                card.style.display = 'none';
+            }
+        });
+    });
+
+    // Toggle favorite
+    function toggleFavorite(songId) {
+        // This would need user selection - simplified for demo
+        alert('Favorite functionality requires user selection. Please use the Favorites page.');
+    }
+
+    // Refresh songs
+    function refreshSongs() {
+        location.reload();
+    }
+
+    // Toggle view (grid/list)
+    let isGridView = true;
+    function toggleView() {
+        const container = document.getElementById('songsContainer');
+        const cards = container.querySelectorAll('.song-card');
+        
+        if (isGridView) {
+            // Switch to list view
+            cards.forEach(card => {
+                card.className = 'col-12 mb-2 song-card';
+            });
+            isGridView = false;
+        } else {
+            // Switch to grid view
+            cards.forEach(card => {
+                card.className = 'col-md-6 col-lg-4 mb-4 song-card';
+            });
+            isGridView = true;
+        }
+    }
+</script>
+{% endblock %}

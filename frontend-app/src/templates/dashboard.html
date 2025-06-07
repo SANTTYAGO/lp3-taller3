@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="jumbotron bg-light p-5 rounded mb-4">
+            <h1 class="display-4">¡Bienvenido, {{ current_user }}!</h1>
+            <p class="lead">Gestiona tu colección de música, usuarios y canciones favoritas en un solo lugar.</p>
+            <hr class="my-4">
+            
+            <!-- Quick Stats -->
+            <div class="row mb-4">
+                <div class="col-md-4">
+                    <div class="card bg-primary text-white">
+                        <div class="card-body text-center">
+                            <i class="fas fa-users fa-2x mb-2"></i>
+                            <h5>Usuarios</h5>
+                            <p class="mb-0">Gestionar cuentas</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card bg-success text-white">
+                        <div class="card-body text-center">
+                            <i class="fas fa-music fa-2x mb-2"></i>
+                            <h5>Canciones</h5>
+                            <p class="mb-0">Biblioteca musical</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card bg-danger text-white">
+                        <div class="card-body text-center">
+                            <i class="fas fa-heart fa-2x mb-2"></i>
+                            <h5>Favoritos</h5>
+                            <p class="mb-0">Canciones preferidas</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Action Cards -->
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <div class="card h-100 border-primary">
+                        <div class="card-body text-center">
+                            <i class="fas fa-users fa-3x text-primary mb-3"></i>
+                            <h5 class="card-title">Gestionar Usuarios</h5>
+                            <p class="card-text">Ver, crear, editar y eliminar cuentas de usuario</p>
+                            <a href="{{ url_for('users') }}" class="btn btn-primary">
+                                <i class="fas fa-arrow-right me-1"></i>Ver Usuarios
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <div class="card h-100 border-success">
+                        <div class="card-body text-center">
+                            <i class="fas fa-music fa-3x text-success mb-3"></i>
+                            <h5 class="card-title">Biblioteca Musical</h5>
+                            <p class="card-text">Explora y administra tu colección de canciones</p>
+                            <a href="{{ url_for('songs') }}" class="btn btn-success">
+                                <i class="fas fa-arrow-right me-1"></i>Ver Canciones
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <div class="card h-100 border-danger">
+                        <div class="card-body text-center">
+                            <i class="fas fa-heart fa-3x text-danger mb-3"></i>
+                            <h5 class="card-title">Canciones Favoritas</h5>
+                            <p class="card-text">Administra las canciones marcadas como favoritas</p>
+                            <a href="{{ url_for('favorites') }}" class="btn btn-danger">
+                                <i class="fas fa-arrow-right me-1"></i>Ver Favoritos
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Actions -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-bolt me-2"></i>Acciones Rápidas
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3 mb-2">
+                        <a href="{{ url_for('create_user') }}" class="btn btn-outline-primary w-100">
+                            <i class="fas fa-user-plus me-1"></i>Nuevo Usuario
+                        </a>
+                    </div>
+                    <div class="col-md-3 mb-2">
+                        <a href="{{ url_for('create_song') }}" class="btn btn-outline-success w-100">
+                            <i class="fas fa-plus me-1"></i>Nueva Canción
+                        </a>
+                    </div>
+                    <div class="col-md-3 mb-2">
+                        <a href="{{ url_for('api_status') }}" class="btn btn-outline-info w-100">
+                            <i class="fas fa-server me-1"></i>Estado API
+                        </a>
+                    </div>
+                    <div class="col-md-3 mb-2">
+                        <a href="{{ url_for('logout') }}" class="btn btn-outline-secondary w-100">
+                            <i class="fas fa-sign-out-alt me-1"></i>Cerrar Sesión
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Welcome animation
+    document.addEventListener('DOMContentLoaded', function() {
+        const cards = document.querySelectorAll('.card');
+        cards.forEach((card, index) => {
+            setTimeout(() => {
+                card.style.opacity = '0';
+                card.style.transform = 'translateY(20px)';
+                card.style.transition = 'all 0.5s ease';
+                
+                setTimeout(() => {
+                    card.style.opacity = '1';
+                    card.style.transform = 'translateY(0)';
+                }, 100);
+            }, index * 100);
+        });
+    });
+</script>
+{% endblock %}

@@ -1,32 +1,187 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Favorite Songs</title>
-    <link rel="stylesheet" href="../static/styles.css">
-</head>
-<body>
-    {% extends 'base.html' %}
+{% extends "base.html" %}
 
-    {% block content %}
-    <h1>Your Favorite Songs</h1>
-    <div id="favorites-list">
-        {% if favorites %}
-            <ul>
-                {% for song in favorites %}
-                    <li>
-                        <strong>{{ song.titulo }}</strong> by {{ song.artista }}
-                        <button onclick="removeFavorite({{ song.id }})">Remove</button>
-                    </li>
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2><i class="fas fa-heart me-2"></i>Favorite Songs</h2>
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addFavoriteModal">
+                <i class="fas fa-plus me-1"></i>Add to Favorites
+            </button>
+        </div>
+
+        <!-- Filter by User -->
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="input-group">
+                    <span class="input-group-text"><i class="fas fa-filter"></i></span>
+                    <select class="form-select" id="userFilter">
+                        <option value="">All Users</option>
+                        <!-- Options will be populated by JavaScript -->
+                    </select>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <button class="btn btn-outline-secondary" onclick="refreshFavorites()">
+                    <i class="fas fa-sync-alt me-1"></i>Refresh
+                </button>
+            </div>
+        </div>
+
+        <!-- Favorites List -->
+        <div class="row" id="favoritesContainer">
+            {% if favorites %}
+                {% for favorite in favorites %}
+                <div class="col-md-6 col-lg-4 mb-4 favorite-card" data-user-id="{{ favorite.user_id if favorite.user_id else '' }}">
+                    <div class="card h-100 border-danger">
+                        <div class="card-body">
+                            <div class="d-flex align-items-start mb-3">
+                                <div class="bg-danger rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 50px; height: 50px;">
+                                    <i class="fas fa-heart text-white"></i>
+                                </div>
+                                <div class="flex-grow-1">
+                                    <h5 class="card-title mb-1">{{ favorite.song_title or 'Unknown Song' }}</h5>
+                                    <p class="card-text text-muted mb-1">
+                                        <i class="fas fa-microphone me-1"></i>{{ favorite.song_artist or 'Unknown Artist' }}
+                                    </p>
+                                    <p class="card-text text-muted mb-1">
+                                        <i class="fas fa-user me-1"></i>{{ favorite.user_name or 'Unknown User' }}
+                                    </p>
+                                </div>
+                            </div>
+                            
+                            {% if favorite.created_at %}
+                            <p class="card-text">
+                                <small class="text-muted">
+                                    <i class="fas fa-calendar me-1"></i>
+                                    Added: {{ favorite.created_at[:10] }}
+                                </small>
+                            </p>
+                            {% endif %}
+                        </div>
+                        <div class="card-footer bg-transparent">
+                            <form method="POST" action="{{ url_for('remove_favorite', favorite_id=favorite.id) }}" class="d-inline w-100" onsubmit="return confirmDelete('Are you sure you want to remove this from favorites?')">
+                                <button type="submit" class="btn btn-outline-danger w-100">
+                                    <i class="fas fa-heart-broken me-1"></i>Remove from Favorites
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
                 {% endfor %}
-            </ul>
-        {% else %}
-            <p>You have no favorite songs yet.</p>
-        {% endif %}
+            {% else %}
+                <div class="col-12">
+                    <div class="text-center py-5">
+                        <i class="fas fa-heart fa-4x text-muted mb-3"></i>
+                        <h4 class="text-muted">No favorite songs yet</h4>
+                        <p class="text-muted">Start adding songs to your favorites collection.</p>
+                        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addFavoriteModal">
+                            <i class="fas fa-plus me-1"></i>Add First Favorite
+                        </button>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
     </div>
-    {% endblock %}
+</div>
 
-    <script src="../static/scripts.js"></script>
-</body>
-</html>
+<!-- Add Favorite Modal -->
+<div class="modal fade" id="addFavoriteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add Song to Favorites</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{{ url_for('add_favorite') }}">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="user_id" class="form-label">User *</label>
+                        <select class="form-select" id="user_id" name="user_id" required>
+                            <option value="">Select a user...</option>
+                            <!-- Options will be populated by JavaScript -->
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="song_id" class="form-label">Song *</label>
+                        <select class="form-select" id="song_id" name="song_id" required>
+                            <option value="">Select a song...</option>
+                            <!-- Options will be populated by JavaScript -->
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Add to Favorites</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Load users and songs for dropdowns
+    document.addEventListener('DOMContentLoaded', function() {
+        loadUsers();
+        loadSongs();
+    });
+
+    async function loadUsers() {
+        try {
+            const response = await fetch('/api/users');
+            const users = await response.json();
+            
+            const userSelect = document.getElementById('user_id');
+            const userFilter = document.getElementById('userFilter');
+            
+            users.forEach(user => {
+                const option = new Option(user.name, user.id);
+                userSelect.add(option.cloneNode(true));
+                userFilter.add(option);
+            });
+        } catch (error) {
+            console.error('Error loading users:', error);
+        }
+    }
+
+    async function loadSongs() {
+        try {
+            const response = await fetch('/api/songs');
+            const songs = await response.json();
+            
+            const songSelect = document.getElementById('song_id');
+            
+            songs.forEach(song => {
+                const option = new Option(`${song.title} - ${song.artist}`, song.id);
+                songSelect.add(option);
+            });
+        } catch (error) {
+            console.error('Error loading songs:', error);
+        }
+    }
+
+    // Filter favorites by user
+    document.getElementById('userFilter').addEventListener('change', function(e) {
+        const selectedUserId = e.target.value;
+        const favoriteCards = document.querySelectorAll('.favorite-card');
+        
+        favoriteCards.forEach(function(card) {
+            const cardUserId = card.getAttribute('data-user-id');
+            
+            if (!selectedUserId || cardUserId === selectedUserId) {
+                card.style.display = 'block';
+            } else {
+                card.style.display = 'none';
+            }
+        });
+    });
+
+    // Refresh favorites
+    function refreshFavorites() {
+        location.reload();
+    }
+</script>
+{% endblock %}

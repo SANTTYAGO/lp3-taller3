@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h4 class="mb-0">
+                    <i class="fas fa-server me-2"></i>Estado de la API
+                </h4>
+            </div>
+            <div class="card-body">
+                <div class="d-flex align-items-center mb-4">
+                    <div class="me-3">
+                        {% if status.status == 'connected' %}
+                        <div class="bg-success rounded-circle" style="width: 20px; height: 20px;"></div>
+                        {% else %}
+                        <div class="bg-danger rounded-circle" style="width: 20px; height: 20px;"></div>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <h5 class="mb-0">
+                            {% if status.status == 'connected' %}
+                            Conectado
+                            {% else %}
+                            Desconectado
+                            {% endif %}
+                        </h5>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <h6>URL de la API:</h6>
+                    <p class="mb-0"><code>{{ status.url }}</code></p>
+                </div>
+
+                <div class="mb-3">
+                    <h6>Mensaje:</h6>
+                    <p class="mb-0">{{ status.message }}</p>
+                </div>
+
+                {% if status.status != 'connected' %}
+                <div class="alert alert-warning">
+                    <h6 class="alert-heading">Soluciones posibles:</h6>
+                    <ol class="mb-0">
+                        <li>Verifica que el servidor API esté ejecutándose en la URL configurada</li>
+                        <li>Comprueba si hay un firewall bloqueando la conexión</li>
+                        <li>Actualiza la variable API_BASE_URL en el archivo .env si la API está en otra ubicación</li>
+                    </ol>
+                </div>
+                {% endif %}
+
+                <div class="mt-4">
+                    <button class="btn btn-primary" onclick="checkStatus()">
+                        <i class="fas fa-sync-alt me-1"></i>Verificar de nuevo
+                    </button>
+                    <a href="{{ url_for('index') }}" class="btn btn-secondary ms-2">
+                        <i class="fas fa-home me-1"></i>Volver al inicio
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function checkStatus() {
+        location.reload();
+    }
+</script>
+{% endblock %}

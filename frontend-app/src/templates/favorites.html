@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Favorite Songs</title>
+    <link rel="stylesheet" href="../static/styles.css">
+</head>
+<body>
+    {% extends 'base.html' %}
+
+    {% block content %}
+    <h1>Your Favorite Songs</h1>
+    <div id="favorites-list">
+        {% if favorites %}
+            <ul>
+                {% for song in favorites %}
+                    <li>
+                        <strong>{{ song.titulo }}</strong> by {{ song.artista }}
+                        <button onclick="removeFavorite({{ song.id }})">Remove</button>
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p>You have no favorite songs yet.</p>
+        {% endif %}
+    </div>
+    {% endblock %}
+
+    <script src="../static/scripts.js"></script>
+</body>
+</html>

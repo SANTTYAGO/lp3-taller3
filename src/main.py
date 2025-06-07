@@ -57,12 +57,25 @@ def login():
             # Attempt login
             result = user_component.login(nombre, correo)
             
+            # Buscar el ID del usuario en la base de datos
+            users_data = user_component.get_all_users()
+            user_id = None
+            for user in users_data:
+                user_name = user.get('nombre') or user.get('name')
+                user_email = user.get('correo') or user.get('email')
+                if user_name == nombre and user_email == correo:
+                    user_id = user['id']
+                    break
+            
             # Store session data
             session['logged_in'] = True
             session['user_name'] = nombre
             session['user_email'] = correo
+            session['user_id'] = user_id  # Agregar esta línea
             session['access_token'] = result.get('access_token')
             session['user_favorites'] = result.get('favoritos', [])
+            
+            print(f"[DEBUG] User logged in: {nombre} (ID: {user_id})")
             
             flash(f'¡Bienvenido, {nombre}!', 'success')
             return redirect(url_for('index'))
@@ -391,6 +404,108 @@ def api_songs():
     try:
         songs_data = song_component.get_all_songs()
         return jsonify(songs_data)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/current-user')
+@login_required
+def api_current_user():
+    """API endpoint to get current user info"""
+    try:
+        # Primero intentar obtener desde la sesión si ya tenemos el ID
+        if 'user_id' in session:
+            return jsonify({
+                'user_id': session['user_id'],
+                'name': session.get('user_name'),
+                'email': session.get('user_email')
+            })
+        
+        # Si no tenemos el ID en sesión, buscarlo en la API
+        users_data = user_component.get_all_users()
+        current_user_name = session.get('user_name')
+        current_user_email = session.get('user_email')
+        
+        print(f"[DEBUG] Looking for user: {current_user_name} ({current_user_email})")
+        print(f"[DEBUG] Available users: {len(users_data)}")
+        
+        current_user = None
+        for user in users_data:
+            user_name = user.get('nombre') or user.get('name')
+            user_email = user.get('correo') or user.get('email')
+            
+            print(f"[DEBUG] Checking user: {user_name} ({user_email}) - ID: {user.get('id')}")
+            
+            if user_name == current_user_name and user_email == current_user_email:
+                current_user = user
+                # Guardar el ID en la sesión para futuras consultas
+                session['user_id'] = user['id']
+                break
+        
+        if current_user:
+            return jsonify({
+                'user_id': current_user['id'],
+                'name': current_user_name,
+                'email': current_user_email
+            })
+        else:
+            print(f"[ERROR] Current user not found in database")
+            return jsonify({'error': 'Current user not found'}), 404
+            
+    except Exception as e:
+        print(f"[ERROR] Error getting current user: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/users/<int:user_id>/favorites')
+@login_required
+def api_user_favorites(user_id):
+    """API endpoint to get favorites for a specific user"""
+    try:
+        favorites_data = favorite_component.get_user_favorites(user_id)
+        return jsonify(favorites_data)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/users/<int:user_id>/favorites/<int:song_id>', methods=['POST'])
+@login_required
+def api_add_user_favorite(user_id, song_id):
+    """API endpoint to add a song to user's favorites"""
+    try:
+        favorite_data = {
+            'user_id': user_id,
+            'song_id': song_id
+        }
+        result = favorite_component.add_favorite(favorite_data)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/users/<int:user_id>/favorites/<int:song_id>', methods=['DELETE'])
+@login_required
+def api_remove_user_favorite(user_id, song_id):
+    """API endpoint to remove a song from user's favorites"""
+    try:
+        # Primero necesitamos encontrar el ID del favorito
+        user_favorites = favorite_component.get_user_favorites(user_id)
+        favorite_to_remove = None
+        
+        for fav in user_favorites:
+            fav_song_id = fav.get('id_cancion') or fav.get('song_id')
+            if fav_song_id == song_id:
+                favorite_to_remove = fav
+                break
+        
+        if favorite_to_remove:
+            favorite_id = favorite_to_remove.get('id')
+            if favorite_id:
+                result = favorite_component.remove_favorite(favorite_id)
+                return jsonify(result)
+            else:
+                # Si no hay ID, usar el endpoint específico de usuario/canción
+                result = favorite_component.remove_favorite_for_user(user_id, song_id)
+                return jsonify(result)
+        else:
+            return jsonify({'error': 'Favorite not found'}), 404
+            
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

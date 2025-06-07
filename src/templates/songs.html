@@ -25,14 +25,25 @@
                 <button class="btn btn-outline-info" onclick="toggleView()">
                     <i class="fas fa-th me-1"></i>Toggle View
                 </button>
+                <button class="btn btn-outline-warning" onclick="window.songsDebug.enableDebug(); window.songsDebug.loadCurrentUserInfo();">
+                    <i class="fas fa-bug me-1"></i>Debug
+                </button>
             </div>
+        </div>
+
+        <!-- Loading indicator for favorites -->
+        <div class="alert alert-info" id="favoriteLoading" style="display: none;">
+            <i class="fas fa-spinner fa-spin me-2"></i>Updating favorites...
         </div>
 
         <!-- Songs Grid -->
         <div class="row" id="songsContainer">
             {% if songs %}
                 {% for song in songs %}
-                <div class="col-md-6 col-lg-4 mb-4 song-card" data-song-title="{{ song.title|lower }}" data-song-artist="{{ song.artist|lower }}">
+                <div class="col-md-6 col-lg-4 mb-4 song-card" 
+                     data-song-title="{{ song.title|lower }}" 
+                     data-song-artist="{{ song.artist|lower }}"
+                     data-song-id="{{ song.id }}">
                     <div class="card h-100">
                         <div class="card-body">
                             <div class="d-flex align-items-start mb-3">
@@ -59,7 +70,11 @@
                                 </span>
                                 {% endif %}
                                 
-                                <button class="btn btn-outline-danger btn-sm btn-favorite" onclick="toggleFavorite({{ song.id }})">
+                                <button class="btn btn-outline-danger btn-sm btn-favorite" 
+                                        id="favorite-btn-{{ song.id }}"
+                                        onclick="toggleFavorite({{ song.id }}, '{{ song.title|replace("'", "\\'") }}', '{{ song.artist|replace("'", "\\'") }}')"
+                                        data-song-id="{{ song.id }}"
+                                        title="Add to favorites">
                                     <i class="fas fa-heart"></i>
                                 </button>
                             </div>
@@ -83,11 +98,18 @@
                 <div class="col-12">
                     <div class="text-center py-5">
                         <i class="fas fa-music fa-4x text-muted mb-3"></i>
-                        <h4 class="text-muted">No songs found</h4>
-                        <p class="text-muted">Start building your music library by adding your first song.</p>
-                        <a href="{{ url_for('create_song') }}" class="btn btn-success">
-                            <i class="fas fa-plus me-1"></i>Add First Song
-                        </a>
+                        <h4 class="text-muted">No se encontraron canciones</h4>
+                        <p class="text-muted">
+                            Esto puede deberse a que no hay canciones en la base de datos o a un problema de conexión con la API.
+                        </p>
+                        <div class="mt-3">
+                            <a href="{{ url_for('songs') }}" class="btn btn-primary me-2">
+                                <i class="fas fa-sync-alt me-1"></i>Intentar de nuevo
+                            </a>
+                            <a href="{{ url_for('api_status') }}" class="btn btn-info">
+                                <i class="fas fa-server me-1"></i>Verificar estado de la API
+                            </a>
+                        </div>
                     </div>
                 </div>
             {% endif %}
@@ -98,6 +120,237 @@
 
 {% block scripts %}
 <script>
+    // Variables globales
+    let currentUserId = null;
+    let userFavorites = [];
+    let debugMode = false;
+
+    // Obtener información del usuario actual al cargar la página
+    document.addEventListener('DOMContentLoaded', function() {
+        loadCurrentUserInfo();
+    });
+
+    function debugLog(message, data = null) {
+        if (debugMode) {
+            console.log('[SONGS DEBUG]', message, data);
+        }
+    }
+
+    async function loadCurrentUserInfo() {
+        try {
+            debugLog('Loading current user info...');
+            
+            const response = await fetch('/api/current-user');
+            if (response.ok) {
+                const userData = await response.json();
+                currentUserId = userData.user_id;
+                debugLog('Current user loaded successfully', userData);
+                console.log('Current user ID:', currentUserId);
+                
+                // Una vez que tenemos el usuario, cargar sus favoritos
+                await loadUserFavorites();
+            } else {
+                const errorData = await response.json();
+                console.error('Could not load current user info:', errorData);
+                showError(`Error loading user info: ${errorData.error || 'Unknown error'}`);
+            }
+        } catch (error) {
+            console.error('Error loading current user info:', error);
+            showError(`Network error loading user info: ${error.message}`);
+        }
+    }
+
+    async function loadUserFavorites() {
+        if (!currentUserId) {
+            debugLog('No current user ID available, skipping favorites load');
+            return;
+        }
+
+        try {
+            debugLog(`Loading favorites for user ${currentUserId}...`);
+            
+            const response = await fetch(`/api/users/${currentUserId}/favorites`);
+            if (response.ok) {
+                userFavorites = await response.json();
+                updateFavoriteButtons();
+                debugLog('User favorites loaded successfully', userFavorites);
+                console.log(`Loaded ${userFavorites.length} favorites for current user`);
+            } else {
+                const errorData = await response.json();
+                console.error('Error loading user favorites:', errorData);
+            }
+        } catch (error) {
+            console.error('Error loading user favorites:', error);
+        }
+    }
+
+    function updateFavoriteButtons() {
+        // Actualizar el estado visual de todos los botones de favoritos
+        const favoriteButtons = document.querySelectorAll('.btn-favorite');
+        debugLog(`Updating ${favoriteButtons.length} favorite buttons`);
+        
+        favoriteButtons.forEach(button => {
+            const songId = parseInt(button.getAttribute('data-song-id'));
+            const isFavorite = userFavorites.some(fav => 
+                (fav.id_cancion === songId || fav.song_id === songId)
+            );
+            
+            debugLog(`Song ${songId} is favorite: ${isFavorite}`);
+            
+            if (isFavorite) {
+                button.classList.remove('btn-outline-danger');
+                button.classList.add('btn-danger');
+                button.title = 'Remove from favorites';
+                button.innerHTML = '<i class="fas fa-heart"></i>';
+            } else {
+                button.classList.remove('btn-danger');
+                button.classList.add('btn-outline-danger');
+                button.title = 'Add to favorites';
+                button.innerHTML = '<i class="far fa-heart"></i>';
+            }
+        });
+    }
+
+    async function toggleFavorite(songId, songTitle, songArtist) {
+        // Verificar que tenemos el usuario actual
+        if (!currentUserId) {
+            // Intentar recargar la información del usuario
+            await loadCurrentUserInfo();
+            
+            if (!currentUserId) {
+                showError('Error: No se pudo identificar el usuario actual. Por favor, inicie sesión nuevamente.');
+                // Redirigir al login después de 3 segundos
+                setTimeout(() => {
+                    window.location.href = '/login';
+                }, 3000);
+                return;
+            }
+        }
+
+        const button = document.getElementById(`favorite-btn-${songId}`);
+        const originalContent = button.innerHTML;
+        
+        // Mostrar loading
+        button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        button.disabled = true;
+        
+        // Mostrar indicador de carga
+        showLoading('Updating favorites...');
+
+        try {
+            debugLog(`Toggling favorite for song ${songId} (user ${currentUserId})`);
+            
+            // Verificar si ya es favorito
+            const isFavorite = userFavorites.some(fav => 
+                (fav.id_cancion === songId || fav.song_id === songId)
+            );
+
+            debugLog(`Song ${songId} is currently favorite: ${isFavorite}`);
+
+            let response;
+            if (isFavorite) {
+                // Remover de favoritos
+                response = await fetch(`/api/users/${currentUserId}/favorites/${songId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+            } else {
+                // Agregar a favoritos
+                response = await fetch(`/api/users/${currentUserId}/favorites/${songId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+            }
+
+            debugLog(`API response status: ${response.status}`);
+
+            if (response.ok) {
+                // Actualizar la lista local de favoritos
+                await loadUserFavorites();
+                
+                // Mostrar mensaje de éxito
+                const action = isFavorite ? 'removed from' : 'added to';
+                showSuccess(`"${songTitle}" ${action} favorites!`);
+            } else {
+                const errorData = await response.json();
+                throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+            }
+
+        } catch (error) {
+            console.error('Error toggling favorite:', error);
+            showError(`Error: ${error.message}`);
+            
+            // Restaurar el botón a su estado original
+            button.innerHTML = originalContent;
+        } finally {
+            button.disabled = false;
+            hideLoading();
+        }
+    }
+
+    function showError(message) {
+        showToast(message, 'error');
+    }
+
+    function showSuccess(message) {
+        showToast(message, 'success');
+    }
+
+    function showLoading(message = 'Loading...') {
+        const loadingDiv = document.getElementById('favoriteLoading');
+        if (loadingDiv) {
+            loadingDiv.querySelector('i').nextSibling.textContent = ` ${message}`;
+            loadingDiv.style.display = 'block';
+        }
+    }
+
+    function hideLoading() {
+        const loadingDiv = document.getElementById('favoriteLoading');
+        if (loadingDiv) {
+            loadingDiv.style.display = 'none';
+        }
+    }
+
+    function showToast(message, type = 'info') {
+        // Crear un toast notification
+        const toastContainer = document.getElementById('toast-container') || createToastContainer();
+        
+        const toast = document.createElement('div');
+        toast.className = `alert alert-${type === 'error' ? 'danger' : 'success'} alert-dismissible fade show`;
+        toast.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        
+        toastContainer.appendChild(toast);
+        
+        // Auto-remove after 5 seconds
+        setTimeout(() => {
+            if (toast.parentNode) {
+                toast.parentNode.removeChild(toast);
+            }
+        }, 5000);
+    }
+
+    function createToastContainer() {
+        const container = document.createElement('div');
+        container.id = 'toast-container';
+        container.className = 'position-fixed top-0 end-0 p-3';
+        container.style.zIndex = '1050';
+        document.body.appendChild(container);
+        return container;
+    }
+
+    // Función para activar modo debug
+    function enableDebug() {
+        debugMode = true;
+        console.log('Debug mode enabled for songs page');
+    }
+
     // Search functionality
     document.getElementById('searchSongs').addEventListener('input', function(e) {
         const searchTerm = e.target.value.toLowerCase();
@@ -114,12 +367,6 @@
             }
         });
     });
-
-    // Toggle favorite
-    function toggleFavorite(songId) {
-        // This would need user selection - simplified for demo
-        alert('Favorite functionality requires user selection. Please use the Favorites page.');
-    }
 
     // Refresh songs
     function refreshSongs() {
@@ -146,5 +393,14 @@
             isGridView = true;
         }
     }
+
+    // Exponer funciones para debugging desde la consola
+    window.songsDebug = {
+        enableDebug: enableDebug,
+        loadCurrentUserInfo: loadCurrentUserInfo,
+        loadUserFavorites: loadUserFavorites,
+        getCurrentUserId: () => currentUserId,
+        getUserFavorites: () => userFavorites
+    };
 </script>
 {% endblock %}

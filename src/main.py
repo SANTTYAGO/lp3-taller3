@@ -287,9 +287,17 @@ def delete_song(song_id):
 def favorites():
     """Display all favorites"""
     try:
+        print("[DEBUG] Loading favorites page...")
         favorites_data = favorite_component.get_all_favorites()
+        print(f"[DEBUG] Loaded {len(favorites_data)} favorites")
+        
+        # Debug: mostrar estructura de datos
+        if favorites_data:
+            print(f"[DEBUG] Sample favorite structure: {favorites_data[0]}")
+        
         return render_template('favorites.html', favorites=favorites_data, title='Favorites')
     except Exception as e:
+        print(f"[ERROR] Error loading favorites: {e}")
         flash(f'Error loading favorites: {str(e)}', 'error')
         return render_template('favorites.html', favorites=[], title='Favorites')
 
@@ -298,13 +306,29 @@ def favorites():
 def add_favorite():
     """Add a song to favorites"""
     try:
+        print(f"[DEBUG] Form data received: {request.form}")
+        
+        user_id = request.form.get('user_id')
+        song_id = request.form.get('song_id')
+        
+        if not user_id or not song_id:
+            raise ValueError("User ID and Song ID are required")
+        
         favorite_data = {
-            'user_id': int(request.form['user_id']),
-            'song_id': int(request.form['song_id'])
+            'user_id': int(user_id),
+            'song_id': int(song_id)
         }
+        
+        print(f"[DEBUG] Adding favorite: {favorite_data}")
         result = favorite_component.add_favorite(favorite_data)
+        print(f"[DEBUG] Add favorite result: {result}")
+        
         flash('Song added to favorites!', 'success')
+    except ValueError as e:
+        print(f"[ERROR] Validation error: {e}")
+        flash(f'Validation error: {str(e)}', 'error')
     except Exception as e:
+        print(f"[ERROR] Error adding to favorites: {e}")
         flash(f'Error adding to favorites: {str(e)}', 'error')
     
     return redirect(url_for('favorites'))
@@ -314,12 +338,41 @@ def add_favorite():
 def remove_favorite(favorite_id):
     """Remove a song from favorites"""
     try:
-        favorite_component.remove_favorite(favorite_id)
+        print(f"[DEBUG] Removing favorite with ID: {favorite_id}")
+        result = favorite_component.remove_favorite(favorite_id)
+        print(f"[DEBUG] Remove favorite result: {result}")
         flash('Song removed from favorites!', 'success')
     except Exception as e:
+        print(f"[ERROR] Error removing from favorites: {e}")
         flash(f'Error removing from favorites: {str(e)}', 'error')
     
     return redirect(url_for('favorites'))
+
+# Agregar nueva ruta para debugging
+@app.route('/favorites/debug')
+@login_required
+def favorites_debug():
+    """Debug endpoint for favorites"""
+    try:
+        # Obtener datos de debug
+        favorites_data = favorite_component.get_all_favorites()
+        summary = favorite_component.get_favorites_summary()
+        
+        debug_info = {
+            'favorites_count': len(favorites_data),
+            'favorites_sample': favorites_data[:3] if favorites_data else [],
+            'summary': summary,
+            'api_base_url': os.getenv('API_BASE_URL'),
+            'session_data': {
+                'logged_in': session.get('logged_in'),
+                'user_name': session.get('user_name'),
+                'access_token_present': bool(session.get('access_token'))
+            }
+        }
+        
+        return jsonify(debug_info)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/users')
 @login_required

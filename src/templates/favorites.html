@@ -10,9 +10,15 @@
             </button>
         </div>
 
+        <!-- Debug Info (solo en desarrollo) -->
+        <div class="alert alert-info" id="debugInfo" style="display: none;">
+            <h6>Debug Information:</h6>
+            <div id="debugContent"></div>
+        </div>
+
         <!-- Filter by User -->
         <div class="row mb-4">
-            <div class="col-md-6">
+            <div class="col-md-4">
                 <div class="input-group">
                     <span class="input-group-text"><i class="fas fa-filter"></i></span>
                     <select class="form-select" id="userFilter">
@@ -21,18 +27,47 @@
                     </select>
                 </div>
             </div>
-            <div class="col-md-6">
-                <button class="btn btn-outline-secondary" onclick="refreshFavorites()">
+            <div class="col-md-4">
+                <div class="input-group">
+                    <span class="input-group-text"><i class="fas fa-search"></i></span>
+                    <input type="text" class="form-control" id="searchFavorites" placeholder="Search by song or artist...">
+                </div>
+            </div>
+            <div class="col-md-4">
+                <button class="btn btn-outline-secondary me-2" onclick="refreshFavorites()">
                     <i class="fas fa-sync-alt me-1"></i>Refresh
                 </button>
+                <button class="btn btn-outline-info" onclick="toggleDebug()">
+                    <i class="fas fa-bug me-1"></i>Debug
+                </button>
             </div>
+        </div>
+
+        <!-- Loading Indicator -->
+        <div class="text-center" id="loadingIndicator" style="display: none;">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-2">Loading favorites...</p>
+        </div>
+
+        <!-- Error Message -->
+        <div class="alert alert-danger" id="errorMessage" style="display: none;">
+            <h6>Error loading favorites:</h6>
+            <div id="errorContent"></div>
+            <button class="btn btn-sm btn-outline-danger mt-2" onclick="refreshFavorites()">
+                <i class="fas fa-retry me-1"></i>Try Again
+            </button>
         </div>
 
         <!-- Favorites List -->
         <div class="row" id="favoritesContainer">
             {% if favorites %}
                 {% for favorite in favorites %}
-                <div class="col-md-6 col-lg-4 mb-4 favorite-card" data-user-id="{{ favorite.user_id if favorite.user_id else '' }}">
+                <div class="col-md-6 col-lg-4 mb-4 favorite-card" 
+                     data-user-id="{{ favorite.user_id if favorite.user_id else favorite.id_usuario if favorite.id_usuario else '' }}"
+                     data-song-title="{{ (favorite.song_title or 'Unknown Song')|lower }}"
+                     data-song-artist="{{ (favorite.song_artist or 'Unknown Artist')|lower }}">
                     <div class="card h-100 border-danger">
                         <div class="card-body">
                             <div class="d-flex align-items-start mb-3">
@@ -44,23 +79,30 @@
                                     <p class="card-text text-muted mb-1">
                                         <i class="fas fa-microphone me-1"></i>{{ favorite.song_artist or 'Unknown Artist' }}
                                     </p>
+                                    {% if favorite.song_album %}
+                                    <p class="card-text text-muted mb-1">
+                                        <i class="fas fa-compact-disc me-1"></i>{{ favorite.song_album }}
+                                    </p>
+                                    {% endif %}
                                     <p class="card-text text-muted mb-1">
                                         <i class="fas fa-user me-1"></i>{{ favorite.user_name or 'Unknown User' }}
                                     </p>
                                 </div>
                             </div>
                             
-                            {% if favorite.created_at %}
+                            {% if favorite.created_at or favorite.fecha_creacion %}
                             <p class="card-text">
                                 <small class="text-muted">
                                     <i class="fas fa-calendar me-1"></i>
-                                    Added: {{ favorite.created_at[:10] }}
+                                    Added: {{ (favorite.created_at or favorite.fecha_creacion)[:10] }}
                                 </small>
                             </p>
                             {% endif %}
                         </div>
                         <div class="card-footer bg-transparent">
-                            <form method="POST" action="{{ url_for('remove_favorite', favorite_id=favorite.id) }}" class="d-inline w-100" onsubmit="return confirmDelete('Are you sure you want to remove this from favorites?')">
+                            <form method="POST" action="{{ url_for('remove_favorite', favorite_id=favorite.id) }}" 
+                                  class="d-inline w-100" 
+                                  onsubmit="return confirmDelete('Are you sure you want to remove this from favorites?')">
                                 <button type="submit" class="btn btn-outline-danger w-100">
                                     <i class="fas fa-heart-broken me-1"></i>Remove from Favorites
                                 </button>
@@ -93,14 +135,17 @@
                 <h5 class="modal-title">Add Song to Favorites</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <form method="POST" action="{{ url_for('add_favorite') }}">
+            <form method="POST" action="{{ url_for('add_favorite') }}" id="addFavoriteForm">
                 <div class="modal-body">
+                    <div class="alert alert-warning" id="modalError" style="display: none;"></div>
+                    
                     <div class="mb-3">
                         <label for="user_id" class="form-label">User *</label>
                         <select class="form-select" id="user_id" name="user_id" required>
                             <option value="">Select a user...</option>
                             <!-- Options will be populated by JavaScript -->
                         </select>
+                        <div class="form-text">Loading users...</div>
                     </div>
                     
                     <div class="mb-3">
@@ -109,11 +154,14 @@
                             <option value="">Select a song...</option>
                             <!-- Options will be populated by JavaScript -->
                         </select>
+                        <div class="form-text">Loading songs...</div>
                     </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Add to Favorites</button>
+                    <button type="submit" class="btn btn-primary" id="addFavoriteBtn">
+                        <i class="fas fa-heart me-1"></i>Add to Favorites
+                    </button>
                 </div>
             </form>
         </div>
@@ -123,65 +171,214 @@
 
 {% block scripts %}
 <script>
+    let debugMode = false;
+    let usersData = [];
+    let songsData = [];
+
     // Load users and songs for dropdowns
     document.addEventListener('DOMContentLoaded', function() {
         loadUsers();
         loadSongs();
     });
 
+    function showError(message) {
+        const errorDiv = document.getElementById('errorMessage');
+        const errorContent = document.getElementById('errorContent');
+        errorContent.textContent = message;
+        errorDiv.style.display = 'block';
+        
+        // Hide loading indicator
+        document.getElementById('loadingIndicator').style.display = 'none';
+    }
+
+    function hideError() {
+        document.getElementById('errorMessage').style.display = 'none';
+    }
+
+    function showLoading() {
+        document.getElementById('loadingIndicator').style.display = 'block';
+        hideError();
+    }
+
+    function hideLoading() {
+        document.getElementById('loadingIndicator').style.display = 'none';
+    }
+
+    function debugLog(message, data = null) {
+        if (debugMode) {
+            console.log('[FAVORITES DEBUG]', message, data);
+            const debugContent = document.getElementById('debugContent');
+            const timestamp = new Date().toLocaleTimeString();
+            debugContent.innerHTML += `<div><strong>${timestamp}:</strong> ${message}</div>`;
+            if (data) {
+                debugContent.innerHTML += `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+            }
+        }
+    }
+
+    function toggleDebug() {
+        debugMode = !debugMode;
+        const debugInfo = document.getElementById('debugInfo');
+        debugInfo.style.display = debugMode ? 'block' : 'none';
+        
+        if (debugMode) {
+            debugLog('Debug mode enabled');
+        }
+    }
+
     async function loadUsers() {
         try {
+            debugLog('Loading users...');
+            showLoading();
+            
             const response = await fetch('/api/users');
-            const users = await response.json();
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            usersData = await response.json();
+            debugLog('Users loaded successfully', usersData);
             
             const userSelect = document.getElementById('user_id');
             const userFilter = document.getElementById('userFilter');
             
-            users.forEach(user => {
-                const option = new Option(user.name, user.id);
-                userSelect.add(option.cloneNode(true));
-                userFilter.add(option);
+            // Clear existing options (except first one)
+            userSelect.innerHTML = '<option value="">Select a user...</option>';
+            userFilter.innerHTML = '<option value="">All Users</option>';
+            
+            usersData.forEach(user => {
+                const userName = user.nombre || user.name || 'Unknown User';
+                const userId = user.id;
+                
+                const option1 = new Option(userName, userId);
+                const option2 = new Option(userName, userId);
+                
+                userSelect.add(option1);
+                userFilter.add(option2);
             });
+            
+            // Update form text
+            const userFormText = userSelect.nextElementSibling;
+            if (userFormText && userFormText.classList.contains('form-text')) {
+                userFormText.textContent = `${usersData.length} users loaded`;
+            }
+            
         } catch (error) {
-            console.error('Error loading users:', error);
+            debugLog('Error loading users', error);
+            showError(`Error loading users: ${error.message}`);
+            
+            const userFormText = document.querySelector('#user_id + .form-text');
+            if (userFormText) {
+                userFormText.textContent = 'Error loading users';
+                userFormText.className = 'form-text text-danger';
+            }
+        } finally {
+            hideLoading();
         }
     }
 
     async function loadSongs() {
         try {
+            debugLog('Loading songs...');
+            showLoading();
+            
             const response = await fetch('/api/songs');
-            const songs = await response.json();
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            songsData = await response.json();
+            debugLog('Songs loaded successfully', songsData);
             
             const songSelect = document.getElementById('song_id');
             
-            songs.forEach(song => {
-                const option = new Option(`${song.title} - ${song.artist}`, song.id);
+            // Clear existing options (except first one)
+            songSelect.innerHTML = '<option value="">Select a song...</option>';
+            
+            songsData.forEach(song => {
+                const songTitle = song.titulo || song.title || 'Unknown Song';
+                const songArtist = song.artista || song.artist || 'Unknown Artist';
+                const songId = song.id;
+                
+                const option = new Option(`${songTitle} - ${songArtist}`, songId);
                 songSelect.add(option);
             });
+            
+            // Update form text
+            const songFormText = songSelect.nextElementSibling;
+            if (songFormText && songFormText.classList.contains('form-text')) {
+                songFormText.textContent = `${songsData.length} songs loaded`;
+            }
+            
         } catch (error) {
-            console.error('Error loading songs:', error);
+            debugLog('Error loading songs', error);
+            showError(`Error loading songs: ${error.message}`);
+            
+            const songFormText = document.querySelector('#song_id + .form-text');
+            if (songFormText) {
+                songFormText.textContent = 'Error loading songs';
+                songFormText.className = 'form-text text-danger';
+            }
+        } finally {
+            hideLoading();
         }
     }
 
     // Filter favorites by user
     document.getElementById('userFilter').addEventListener('change', function(e) {
         const selectedUserId = e.target.value;
+        filterFavorites();
+    });
+
+    // Search favorites
+    document.getElementById('searchFavorites').addEventListener('input', function(e) {
+        filterFavorites();
+    });
+
+    function filterFavorites() {
+        const selectedUserId = document.getElementById('userFilter').value;
+        const searchTerm = document.getElementById('searchFavorites').value.toLowerCase();
         const favoriteCards = document.querySelectorAll('.favorite-card');
         
         favoriteCards.forEach(function(card) {
             const cardUserId = card.getAttribute('data-user-id');
+            const songTitle = card.getAttribute('data-song-title') || '';
+            const songArtist = card.getAttribute('data-song-artist') || '';
             
-            if (!selectedUserId || cardUserId === selectedUserId) {
+            const userMatch = !selectedUserId || cardUserId === selectedUserId;
+            const searchMatch = !searchTerm || 
+                               songTitle.includes(searchTerm) || 
+                               songArtist.includes(searchTerm);
+            
+            if (userMatch && searchMatch) {
                 card.style.display = 'block';
             } else {
                 card.style.display = 'none';
             }
         });
+    }
+
+    // Form submission
+    document.getElementById('addFavoriteForm').addEventListener('submit', function(e) {
+        const submitBtn = document.getElementById('addFavoriteBtn');
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Adding...';
+        submitBtn.disabled = true;
+        
+        // Hide any previous modal errors
+        document.getElementById('modalError').style.display = 'none';
     });
 
     // Refresh favorites
     function refreshFavorites() {
+        debugLog('Refreshing favorites...');
         location.reload();
+    }
+
+    // Show modal error
+    function showModalError(message) {
+        const modalError = document.getElementById('modalError');
+        modalError.textContent = message;
+        modalError.style.display = 'block';
     }
 </script>
 {% endblock %}
